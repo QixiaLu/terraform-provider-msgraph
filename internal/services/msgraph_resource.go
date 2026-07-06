@@ -242,7 +242,7 @@ func (r *MSGraphResource) Create(ctx context.Context, req resource.CreateRequest
 		QueryParameters: clients.NewQueryParameters(AsMapOfLists(model.CreateQueryParameters)),
 		RetryOptions:    clients.NewRetryOptions(model.Retry),
 	}
-	responseBody, err := r.client.Create(ctx, model.Url.ValueString(), model.ApiVersion.ValueString(), requestBody, options)
+	responseBody, location, err := r.client.Create(ctx, model.Url.ValueString(), model.ApiVersion.ValueString(), requestBody, options)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create resource", err.Error())
 		return
@@ -261,15 +261,10 @@ func (r *MSGraphResource) Create(ctx context.Context, req resource.CreateRequest
 			}
 		}
 	} else {
-		responseId := ""
-		if responseBody != nil {
-			if responseMap, ok := responseBody.(map[string]interface{}); ok {
-				if idValue, ok := responseMap["id"]; ok && idValue != nil {
-					if idString, ok := idValue.(string); ok {
-						responseId = idString
-					}
-				}
-			}
+		responseId, err := resolveResourceID(responseBody, location)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to determine resource ID", err.Error())
+			return
 		}
 
 		model.Id = types.StringValue(responseId)
@@ -697,6 +692,30 @@ func buildOutputFromBody(body interface{}, paths map[string]string) attr.Value {
 		return nil
 	}
 	return out
+}
+
+// resolveResourceID returns the resource ID for a created resource: the response
+// body's top-level `id` when present, otherwise the last path segment of the
+// `Location` header (set by the client only for a synchronous 201 Created, so an
+// async 202 monitor URL is never used). Covers APIs keyed by a non-`id` field.
+// The result is verified
+// by the read of {url}/{id} that follows, so a wrong value fails loudly.
+func resolveResourceID(responseBody interface{}, location string) (string, error) {
+	if responseMap, ok := responseBody.(map[string]interface{}); ok {
+		if id, ok := responseMap["id"].(string); ok && id != "" {
+			return id, nil
+		}
+	}
+
+	if parsed, err := url.Parse(location); err == nil {
+		if trimmed := strings.TrimRight(parsed.Path, "/"); trimmed != "" {
+			if id := trimmed[strings.LastIndex(trimmed, "/")+1:]; id != "" {
+				return id, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("unable to determine the resource ID: the create response contained no top-level `id` field and no usable `Location` header")
 }
 
 func (r *MSGraphResource) MoveState(ctx context.Context) []resource.StateMover {
