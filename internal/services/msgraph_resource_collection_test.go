@@ -34,6 +34,22 @@ func TestAcc_ResourceCollectionBasic(t *testing.T) {
 	})
 }
 
+func TestAcc_ResourceCollectionSkipDestroy(t *testing.T) {
+	data := acceptance.BuildTestData(t, "msgraph_resource_collection", "test")
+	r := MSGraphTestResourceCollection{}
+
+	data.ResourceTest(t, r, []resource.TestStep{
+		{
+			Config: r.skipDestroyOwners(),
+			Check: resource.ComposeTestCheckFunc(
+				check.That(data.ResourceName).Exists(r),
+				resource.TestCheckResourceAttr(data.ResourceName, "reference_ids.#", "1"),
+				resource.TestCheckResourceAttr(data.ResourceName, "skip_destroy", "true"),
+			),
+		},
+	})
+}
+
 func TestAcc_ResourceCollectionUpdate(t *testing.T) {
 	data := acceptance.BuildTestData(t, "msgraph_resource_collection", "test")
 	r := MSGraphTestResourceCollection{}
@@ -240,6 +256,43 @@ resource "msgraph_resource_collection" "test" {
   url           = "groups/${msgraph_resource.group.id}/members/$ref"
   api_version   = "beta"
   reference_ids = [msgraph_resource.sp_a.id]
+}
+`
+}
+
+func (r MSGraphTestResourceCollection) skipDestroyOwners() string {
+	return `
+resource "msgraph_resource" "application_a" {
+  url = "applications"
+  body = {
+    displayName = "Collection App a"
+  }
+  response_export_values = {
+    appId = "appId"
+  }
+}
+
+resource "msgraph_resource" "sp_a" {
+  url = "servicePrincipals"
+  body = {
+    appId = msgraph_resource.application_a.output.appId
+  }
+}
+
+resource "msgraph_resource" "group" {
+  url = "groups"
+  body = {
+    displayName     = "Collection Group Skip Destroy"
+    mailEnabled     = false
+    mailNickname    = "collection-group-skip-destroy"
+    securityEnabled = true
+  }
+}
+
+resource "msgraph_resource_collection" "test" {
+  url           = "groups/${msgraph_resource.group.id}/owners/$ref"
+  reference_ids = [msgraph_resource.sp_a.id]
+  skip_destroy  = true
 }
 `
 }

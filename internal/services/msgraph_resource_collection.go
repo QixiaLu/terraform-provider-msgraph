@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -46,6 +47,7 @@ type MSGraphResourceCollectionModel struct {
 	ApiVersion           types.String      `tfsdk:"api_version"`
 	Url                  types.String      `tfsdk:"url"`
 	ReferenceIds         types.List        `tfsdk:"reference_ids"`
+	SkipDestroy          types.Bool        `tfsdk:"skip_destroy"`
 	ReadQueryParameters  types.Map         `tfsdk:"read_query_parameters"`
 	Retry                retry.Value       `tfsdk:"retry"`
 	ResponseExportValues map[string]string `tfsdk:"response_export_values"`
@@ -93,6 +95,13 @@ func (r *MSGraphResourceCollection) Schema(ctx context.Context, req resource.Sch
 				ElementType:         types.StringType,
 				Optional:            true,
 				PlanModifiers:       []planmodifier.List{myplanmodifier.OrderInsensitiveStringList()},
+			},
+
+			"skip_destroy": schema.BoolAttribute{
+				MarkdownDescription: "When `true`, destroying this resource removes it from Terraform state without calling Microsoft Graph to remove the references. Useful when the parent resource (e.g. a group whose owners/members these are) is destroyed in the same operation, since deleting the parent removes the references automatically. Defaults to `false`.",
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
 			},
 
 			"read_query_parameters": schema.MapAttribute{
@@ -259,6 +268,11 @@ func (r *MSGraphResourceCollection) Delete(ctx context.Context, req resource.Del
 		return
 	}
 
+	if model.SkipDestroy.ValueBool() {
+		tflog.Info(ctx, "skip_destroy is set to true; removing collection from state without removing references")
+		return
+	}
+
 	timeout, diags := model.Timeouts.Delete(ctx, 30*time.Minute)
 	resp.Diagnostics.Append(diags...)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -367,6 +381,7 @@ func (r *MSGraphResourceCollection) ImportState(ctx context.Context, req resourc
 		Url:                 types.StringValue(urlValue),
 		ApiVersion:          types.StringValue(apiVersion),
 		ReferenceIds:        types.ListNull(types.StringType),
+		SkipDestroy:         types.BoolValue(false),
 		ReadQueryParameters: types.MapNull(types.ListType{ElemType: types.StringType}),
 		Retry:               retry.NewValueNull(),
 		Timeouts: timeouts.Value{

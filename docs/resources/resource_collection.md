@@ -104,6 +104,7 @@ Manage the full contents of a child reference collection (such as group members 
 
 To learn more about JMESPath, visit [JMESPath](https://jmespath.org/).
 - `retry` (Attributes) The retry object supports the following attributes: (see [below for nested schema](#nestedatt--retry))
+- `skip_destroy` (Boolean) When `true`, destroying this resource removes it from Terraform state without calling Microsoft Graph to remove the references. Useful when the parent resource (e.g. a group whose owners/members these are) is destroyed in the same operation, since deleting the parent removes the references automatically. Defaults to `false`.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
