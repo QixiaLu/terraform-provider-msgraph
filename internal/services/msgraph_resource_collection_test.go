@@ -291,6 +291,7 @@ resource "msgraph_resource" "group" {
 
 resource "msgraph_resource_collection" "test" {
   url           = "groups/${msgraph_resource.group.id}/owners/$ref"
+  api_version   = "beta"
   reference_ids = [msgraph_resource.sp_a.id]
   skip_destroy  = true
 }
