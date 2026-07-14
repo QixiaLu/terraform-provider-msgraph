@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"log"
+	"math"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -91,6 +92,16 @@ func (client *Client) Build(ctx context.Context, o *Option) error {
 			IncludeBody:        false,
 			AllowedHeaders:     allowedHeaders,
 			AllowedQueryParams: allowedQueryParams,
+		},
+		// Baseline retry policy applied to every request: retry transient failures
+		// using azcore's built-in status-code matching. MaxRetries is set
+		// very high so the effective retry budget is bounded by each operation's context
+		// deadline rather than a fixed count. Per-request overrides (user-configured
+		// `retry` regex and read-after-create 404/403 handling) are layered on top via
+		// policy.WithRetryOptions at the call site.
+		Retry: policy.RetryOptions{
+			MaxRetries:  math.MaxInt16,
+			StatusCodes: DefaultRetryableStatusCodes,
 		},
 		PerCallPolicies:  perCallPolicies,
 		PerRetryPolicies: perRetryPolicies,

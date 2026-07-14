@@ -112,6 +112,10 @@ func NewRetryOptionsForReadAfterCreate() *policy.RetryOptions {
 		ShouldRetry: func(resp *http.Response, err error) bool {
 			// We need to test for status codes here too. This covers the case that these options are combined with
 			// retry options from NewRetryOptions, because the ShouldRetry function takes precedence over StatusCodes.
+			if resp == nil {
+				return err != nil
+			}
+
 			for _, code := range statusCodes {
 				if resp.StatusCode == code {
 					return true
@@ -134,7 +138,10 @@ func NewRetryOptions(rtry retry.Value) *policy.RetryOptions {
 		MaxRetries:  math.MaxInt16,
 		StatusCodes: DefaultRetryableStatusCodes,
 		ShouldRetry: func(resp *http.Response, err error) bool {
-			// We need to test for DefaultRetryableStatusCodes here as using ShouldRetry overrides the use of StatusCodes.
+			if resp == nil {
+				return err != nil
+			}
+
 			for _, code := range DefaultRetryableStatusCodes {
 				if resp.StatusCode == code {
 					return true

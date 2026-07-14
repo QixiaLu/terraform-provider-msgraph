@@ -177,7 +177,10 @@ func (r *MSGraphResourceCollection) Create(ctx context.Context, req resource.Cre
 	base := baseCollectionUrl(model.Url.ValueString())
 	opts := clients.RequestOptions{
 		QueryParameters: clients.NewQueryParameters(AsMapOfLists(model.ReadQueryParameters)),
-		RetryOptions:    clients.NewRetryOptions(model.Retry),
+		RetryOptions: clients.CombineRetryOptions(
+			clients.NewRetryOptionsForReadAfterCreate(),
+			clients.NewRetryOptions(model.Retry),
+		),
 	}
 	body, err := r.client.List(ctx, base, model.ApiVersion.ValueString(), opts)
 	if err != nil {

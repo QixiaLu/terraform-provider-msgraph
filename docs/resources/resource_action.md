@@ -185,7 +185,7 @@ To learn more about JMESPath, visit [JMESPath](https://jmespath.org/).
 
 Required:
 
-- `error_message_regex` (List of String) A list of regular expressions to match against error messages. If any of the regular expressions match, the request will be retried.
+- `error_message_regex` (List of String) A list of regular expressions matched against error messages to trigger a retry. Transient HTTP errors (408, 429, 500, 502, 503, and 504) are always retried regardless of this setting; use this to retry on additional, non-transient errors.
 
 
 <a id="nestedblock--timeouts"></a>

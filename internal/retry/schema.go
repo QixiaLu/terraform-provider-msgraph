@@ -16,8 +16,8 @@ func Schema(ctx context.Context) schema.Attribute {
 			"error_message_regex": schema.ListAttribute{
 				ElementType:         types.StringType,
 				Required:            true,
-				Description:         "A list of regular expressions to match against error messages. If any of the regular expressions match, the request will be retried.",
-				MarkdownDescription: "A list of regular expressions to match against error messages. If any of the regular expressions match, the request will be retried.",
+				Description:         "A list of regular expressions matched against error messages to trigger a retry. Transient HTTP errors (408, 429, 500, 502, 503, and 504) are always retried regardless of this setting; use this to retry on additional, non-transient errors.",
+				MarkdownDescription: "A list of regular expressions matched against error messages to trigger a retry. Transient HTTP errors (408, 429, 500, 502, 503, and 504) are always retried regardless of this setting; use this to retry on additional, non-transient errors.",
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(myvalidator.StringIsValidRegex()),
 					listvalidator.UniqueValues(),

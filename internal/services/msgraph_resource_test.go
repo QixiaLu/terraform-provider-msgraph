@@ -156,6 +156,24 @@ func TestAcc_ResourceRetry(t *testing.T) {
 	})
 }
 
+func TestAcc_ResourceRetryOnThrottle(t *testing.T) {
+	data := acceptance.BuildTestData(t, "msgraph_resource", "test")
+
+	r := MSGraphTestResource{}
+
+	data.ResourceTest(t, r, []resource.TestStep{
+		{
+			Config: r.throttleRetry(60),
+			Check: resource.ComposeTestCheckFunc(
+				check.That(fmt.Sprintf("%s.0", data.ResourceName)).Exists(r),
+				check.That(fmt.Sprintf("%s.0", data.ResourceName)).Key("id").IsUUID(),
+				check.That(fmt.Sprintf("%s.%d", data.ResourceName, 59)).Exists(r),
+				check.That(fmt.Sprintf("%s.%d", data.ResourceName, 59)).Key("id").IsUUID(),
+			),
+		},
+	})
+}
+
 func TestAcc_ResourceTimeouts_Create(t *testing.T) {
 	data := acceptance.BuildTestData(t, "msgraph_resource", "test")
 
@@ -451,6 +469,29 @@ resource "msgraph_resource" "test" {
     ]
   }
 }`
+}
+
+func (r MSGraphTestResource) throttleRetry(count int) string {
+	return fmt.Sprintf(`
+resource "msgraph_resource" "test" {
+  count = %d
+
+  url         = "identity/conditionalAccess/namedLocations"
+  api_version = "beta"
+
+  body = {
+    "@odata.type" = "#microsoft.graph.ipNamedLocation"
+    displayName   = "acctest-retry-${count.index}"
+    isTrusted     = false
+    ipRanges = [
+      {
+        "@odata.type" = "#microsoft.graph.iPv4CidrRange"
+        cidrAddress   = "203.0.113.${count.index + 1}/32"
+      }
+    ]
+  }
+}
+`, count)
 }
 
 func (r MSGraphTestResource) withCreateTimeout() string {
