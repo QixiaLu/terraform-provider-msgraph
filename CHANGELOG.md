@@ -1,12 +1,24 @@
-## 0.4.0 (Unreleased)
+## 0.4.0
 
 ENHANCEMENTS:
 - `msgraph_resource_collection`: Support resource import for collection resources (e.g. groups/{id}/members/$ref) to allow importing existing relationships into Terraform state.
 - `msgraph_resource_collection`: Added support for `skip_destroy` attribute to remove the resource from state without removing the references on destroy. This allows deleting a parent resource (such as a group) that would otherwise fail with constraints like "The group must have at least one owner, hence this owner cannot be removed." ([#78](https://github.com/microsoft/terraform-provider-msgraph/issues/78))
 - Retry of transient failures (`429`, `408`, `500`, `502`, `503` and `504`) is now applied by default regardless of whether a `retry` block is configured.
 
+DEPENDENCIES:
+- Updated `github.com/Azure/azure-sdk-for-go/sdk/azcore` from v1.19.1 to v1.21.1
+- Updated `github.com/Azure/azure-sdk-for-go/sdk/azidentity` from v1.13.0 to v1.13.1
+- Updated `github.com/hashicorp/terraform-plugin-framework` from v1.13.0 to v1.19.0
+- Updated `github.com/hashicorp/terraform-plugin-framework-validators` from v0.15.0 to v0.19.0
+- Updated `github.com/hashicorp/terraform-plugin-framework-timeouts` from v0.5.0 to v0.7.0
+- Updated `github.com/hashicorp/terraform-plugin-go` from v0.25.0 to v0.31.0
+- Updated `github.com/hashicorp/terraform-plugin-sdk/v2` from v2.35.0 to v2.40.1
+- Updated `github.com/hashicorp/terraform-plugin-testing` from v1.11.0 to v1.16.0
+- Updated `github.com/hashicorp/terraform-plugin-docs` from v0.20.1 to v0.25.0
+
 BUG FIXES:
 - Fixed an issue where transient errors such as `429 Too Many Requests` were not retried during create, delete, and the create/delete consistency checks, causing operations to fail under throttling. ([#129](https://github.com/microsoft/terraform-provider-msgraph/issues/129))
+- `msgraph_resource`: Fixed an issue where creating a resource failed to determine its ID when the create response contained no top-level `id` field. The provider now falls back to the `Location` header returned by the API. ([#107](https://github.com/microsoft/terraform-provider-msgraph/issues/107))
 
 ## 0.3.0
 
