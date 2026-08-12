@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/microsoft/terraform-provider-msgraph/internal/dynamic"
 )
 
 func TestResolveResourceID(t *testing.T) {
@@ -124,6 +127,51 @@ func TestReconcileReferenceIdOrder(t *testing.T) {
 			got := reconcileReferenceIdOrder(tt.previous, tt.current)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("expected %#v, got %#v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestRelationshipRefObjectID(t *testing.T) {
+	mustDynamic := func(jsonBody string) types.Dynamic {
+		v, err := dynamic.FromJSONImplied([]byte(jsonBody))
+		if err != nil {
+			t.Fatalf("failed to build dynamic value from %q: %s", jsonBody, err)
+		}
+		return v
+	}
+
+	tests := []struct {
+		name string
+		body types.Dynamic
+		want string
+	}{
+		{
+			name: "directoryObjects form",
+			body: mustDynamic(`{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/00000000-0000-0000-0000-000000000001"}`),
+			want: "00000000-0000-0000-0000-000000000001",
+		},
+		{
+			name: "users form resolves to same id",
+			body: mustDynamic(`{"@odata.id":"https://graph.microsoft.com/v1.0/users/00000000-0000-0000-0000-000000000001"}`),
+			want: "00000000-0000-0000-0000-000000000001",
+		},
+		{
+			name: "null body yields empty",
+			body: types.DynamicNull(),
+			want: "",
+		},
+		{
+			name: "body without @odata.id yields empty",
+			body: mustDynamic(`{"displayName":"not a ref"}`),
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := relationshipRefObjectID(tt.body); got != tt.want {
+				t.Fatalf("expected %q, got %q", tt.want, got)
 			}
 		})
 	}

@@ -209,12 +209,28 @@ func (r *MSGraphResource) ModifyPlan(ctx context.Context, request resource.Modif
 	}
 
 	if strings.Contains(plan.Url.ValueString(), "/$ref") {
-		if !dynamic.SemanticallyEqual(plan.Body, state.Body) {
+		// A relationship is identified only by the object it references, so compare
+		// object IDs rather than the `@odata.id` text: Microsoft Graph accepts
+		// several equivalent URL forms, and `id` is populated even when `body` is
+		// absent (imported or older state). Same reference means no replacement
+		// (issue #91). `body` is left at its configured value because it is not
+		// Computed; any remaining difference becomes an in-place update that Update
+		// simply persists.
+		planRefID := relationshipRefObjectID(plan.Body)
+		stateRefID := state.Id.ValueString()
+		if stateRefID == "" {
+			stateRefID = relationshipRefObjectID(state.Body)
+		}
+
+		sameReference := planRefID != "" && strings.EqualFold(planRefID, stateRefID)
+		if !sameReference && !dynamic.SemanticallyEqual(plan.Body, state.Body) {
 			response.RequiresReplace.Append(path.Root("body"))
 		}
+
 		if !reflect.DeepEqual(plan.ResponseExportValues, state.ResponseExportValues) {
 			response.RequiresReplace.Append(path.Root("response_export_values"))
 		}
+
 		if !reflect.DeepEqual(plan.ApiVersion, state.ApiVersion) {
 			response.RequiresReplace.Append(path.Root("api_version"))
 		}
@@ -253,7 +269,7 @@ func (r *MSGraphResource) Create(ctx context.Context, req resource.CreateRequest
 		if requestMap, ok := requestBody.(map[string]interface{}); ok {
 			if idValue, ok := requestMap["@odata.id"]; ok {
 				if idString, ok := idValue.(string); ok {
-					uuidValue := idString[strings.LastIndex(idString, "/")+1:]
+					uuidValue := utils.LastSegment(idString)
 					model.Id = types.StringValue(uuidValue)
 					// For $ref URLs, resource_url should be the collection URL without $ref + the ID
 					baseUrl := strings.TrimSuffix(model.Url.ValueString(), "/$ref")
@@ -307,7 +323,17 @@ func (r *MSGraphResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	// relationship updates are not supported
+	// A relationship ($ref) has nothing to update: a changed reference forces a
+	// replacement in ModifyPlan, so reaching Update means only local values (such
+	// as a `body` absent from imported state) changed. Persist them without
+	// calling Graph, which does not support PATCH on a relationship URL.
+	if strings.HasSuffix(model.Url.ValueString(), "/$ref") {
+		if model.Output.IsUnknown() {
+			model.Output = types.DynamicNull()
+		}
+		resp.Diagnostics.Append(resp.State.Set(ctx, &model)...)
+		return
+	}
 
 	updateTimeout, diags := model.Timeouts.Update(ctx, 30*time.Minute)
 	resp.Diagnostics.Append(diags...)
@@ -416,13 +442,7 @@ func (r *MSGraphResource) Read(ctx context.Context, req resource.ReadRequest, re
 			resp.Diagnostics.AddError("Failed to read collection", err.Error())
 			return
 		}
-		found := false
-		for _, refId := range referenceIds {
-			if refId == model.Id.ValueString() {
-				found = true
-				break
-			}
-		}
+		found := containsRefID(referenceIds, model.Id.ValueString())
 		if !found {
 			tflog.Info(ctx, fmt.Sprintf("Resource %q not found in collection %q - removing from state", model.Id.ValueString(), collectionUrl))
 			resp.State.RemoveResource(ctx)
@@ -430,15 +450,7 @@ func (r *MSGraphResource) Read(ctx context.Context, req resource.ReadRequest, re
 		}
 
 		if v, _ := req.Private.GetKey(ctx, FlagMoveState); v != nil && string(v) == "true" {
-			body := map[string]string{
-				"@odata.id": fmt.Sprintf("%s/%s/directoryObjects/%s", r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), model.Id.ValueString()),
-			}
-			data, err := json.Marshal(body)
-			if err != nil {
-				resp.Diagnostics.AddError("Invalid body", err.Error())
-				return
-			}
-			payload, err := dynamic.FromJSONImplied(data)
+			payload, err := relationshipRefBody(r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), model.Id.ValueString())
 			if err != nil {
 				resp.Diagnostics.AddError("Invalid payload", err.Error())
 				return
@@ -582,13 +594,7 @@ func ResourceExistenceFunc(client *clients.MSGraphClient, model *MSGraphResource
 				}
 				return nil, err
 			}
-			found := false
-			for _, refId := range referenceIds {
-				if refId == model.Id.ValueString() {
-					found = true
-					break
-				}
-			}
+			found := containsRefID(referenceIds, model.Id.ValueString())
 			return &found, nil
 		}
 
@@ -681,7 +687,103 @@ func (r *MSGraphResource) ImportState(ctx context.Context, req resource.ImportSt
 			}),
 		},
 	}
+
+	// For a relationship ($ref) resource, confirm the reference actually exists
+	// and reconstruct its `body`, mirroring how azapi's ImportState issues a GET
+	// and populates `body` from the response.
+	//
+	// Microsoft Graph has no single-reference GET (only DELETE targets
+	// `.../{id}/$ref`), so existence is verified by listing the collection. The
+	// list yields clean object IDs, so the canonical `.../directoryObjects/{id}`
+	// form is rebuilt from `id` rather than parsing the returned `@odata.id`,
+	// whose `$ref` form can carry a tenant prefix and a type-cast suffix.
+	// ModifyPlan compares only the referenced object ID, so a configuration that
+	// uses an equivalent form (for example `.../users/{id}`) still plans cleanly.
+	if strings.HasSuffix(urlValue, "/$ref") {
+		if r.client == nil {
+			resp.Diagnostics.AddError("Provider not configured", "The Microsoft Graph client is not configured; cannot import a relationship resource.")
+			return
+		}
+
+		collectionUrl := baseCollectionUrl(urlValue)
+		options := clients.RequestOptions{
+			QueryParameters: clients.NewQueryParameters(nil),
+			RetryOptions:    clients.NewRetryOptions(retry.NewValueNull()),
+		}
+		referenceIds, err := r.client.ListRefIDs(ctx, collectionUrl, apiVersion, options)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to read collection", fmt.Sprintf("listing references for %q: %s", collectionUrl, err.Error()))
+			return
+		}
+
+		if !containsRefID(referenceIds, id) {
+			resp.Diagnostics.AddError(
+				"Reference not found",
+				fmt.Sprintf("The object %q is not a member of the collection %q, so there is nothing to import.", id, collectionUrl),
+			)
+			return
+		}
+
+		payload, err := relationshipRefBody(r.client.GraphBaseUrl(), apiVersion, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid payload", err.Error())
+			return
+		}
+		model.Body = payload
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
+}
+
+// relationshipRefBody builds the canonical relationship ($ref) body for the
+// given object ID: { "@odata.id": "<graphBaseURL>/<apiVersion>/directoryObjects/<id>" }.
+// `directoryObjects` is the base type that is valid for every directory object
+// (user, group, device, service principal, ...), so it is used regardless of
+// the referenced object's concrete type. ModifyPlan compares only the trailing
+// object ID, so this canonical form still matches an equivalent configuration
+// such as ".../users/{id}".
+func relationshipRefBody(graphBaseURL, apiVersion, id string) (types.Dynamic, error) {
+	data, err := json.Marshal(map[string]string{
+		"@odata.id": fmt.Sprintf("%s/%s/directoryObjects/%s", graphBaseURL, apiVersion, id),
+	})
+	if err != nil {
+		return types.DynamicNull(), err
+	}
+	return dynamic.FromJSONImplied(data)
+}
+
+// containsRefID reports whether id is present in referenceIds, comparing
+// case-insensitively to tolerate GUID casing differences returned by Microsoft
+// Graph, consistent with reconcileReferenceIdOrder.
+func containsRefID(referenceIds []string, id string) bool {
+	for _, refID := range referenceIds {
+		if strings.EqualFold(refID, id) {
+			return true
+		}
+	}
+	return false
+}
+
+// relationshipRefObjectID extracts the referenced object ID from a relationship
+// ($ref) body. A relationship body has the shape { "@odata.id": "<url>/<id>" }
+// and the trailing path segment is the object ID. Equivalent forms such as
+// ".../directoryObjects/{id}" and ".../users/{id}" therefore yield the same ID.
+// The segment is taken exactly as Create does when deriving `id`, so both agree
+// on what a given `@odata.id` refers to.
+// Returns "" when the body is null/unknown or has no usable @odata.id.
+func relationshipRefObjectID(body types.Dynamic) string {
+	if body.IsNull() || body.IsUnknown() || body.IsUnderlyingValueNull() || body.IsUnderlyingValueUnknown() {
+		return ""
+	}
+	requestBody := make(map[string]interface{})
+	if err := unmarshalBody(body, &requestBody); err != nil {
+		return ""
+	}
+	odataID, ok := requestBody["@odata.id"].(string)
+	if !ok || odataID == "" {
+		return ""
+	}
+	return utils.LastSegment(odataID)
 }
 
 func buildOutputFromBody(body interface{}, paths map[string]string) attr.Value {
