@@ -25,8 +25,8 @@ type Option struct {
 	Cred                        azcore.TokenCredential
 	ApplicationUserAgent        string
 	DisableCorrelationRequestID bool
-	CustomCorrelationRequestID  string
 	CloudCfg                    cloud.Configuration
+	CustomCorrelationRequestID  string
 	TenantId                    string
 }
 
@@ -87,7 +87,7 @@ func (client *Client) Build(ctx context.Context, o *Option) error {
 		"$format",
 	}
 
-	msgraphClient, err := NewMSGraphClient(o.Cred, o.CloudCfg, &policy.ClientOptions{
+	msgraphClient, err := NewMSGraphClient(o.Cred, &policy.ClientOptions{
 		Logging: policy.LogOptions{
 			IncludeBody:        false,
 			AllowedHeaders:     allowedHeaders,
