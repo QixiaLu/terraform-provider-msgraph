@@ -47,7 +47,7 @@ func (client *Client) Build(ctx context.Context, o *Option) error {
 		}
 		perCallPolicies = append(perCallPolicies, withCorrelationRequestID(id))
 	}
-	perRetryPolicies := make([]policy.Policy, 0)
+	perRetryPolicies := make([]policy.Policy, 0, 1)
 	perRetryPolicies = append(perRetryPolicies, NewLiveTrafficLogPolicy())
 
 	allowedHeaders := []string{
