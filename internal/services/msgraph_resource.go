@@ -110,6 +110,9 @@ func (r *MSGraphResource) Schema(ctx context.Context, req resource.SchemaRequest
 			"body": schema.DynamicAttribute{
 				MarkdownDescription: docstrings.Body(),
 				Optional:            true,
+				PlanModifiers: []planmodifier.Dynamic{
+					relationshipBodyPlanModifier{},
+				},
 			},
 
 			"ignore_missing_property": schema.BoolAttribute{
@@ -209,7 +212,7 @@ func (r *MSGraphResource) ModifyPlan(ctx context.Context, request resource.Modif
 	}
 
 	if strings.Contains(plan.Url.ValueString(), "/$ref") {
-		if !dynamic.SemanticallyEqual(plan.Body, state.Body) {
+		if !relationshipBodiesSemanticallyEqual(plan.Body, state.Body) {
 			response.RequiresReplace.Append(path.Root("body"))
 		}
 		if !reflect.DeepEqual(plan.ResponseExportValues, state.ResponseExportValues) {
@@ -427,6 +430,15 @@ func (r *MSGraphResource) Read(ctx context.Context, req resource.ReadRequest, re
 			tflog.Info(ctx, fmt.Sprintf("Resource %q not found in collection %q - removing from state", model.Id.ValueString(), collectionUrl))
 			resp.State.RemoveResource(ctx)
 			return
+		}
+
+		if model.Body.IsNull() {
+			body, err := referenceBodyForID(graphBaseURL(r.client), model.ApiVersion.ValueString(), model.Id.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Invalid body", err.Error())
+				return
+			}
+			state.Body = body
 		}
 
 		if v, _ := req.Private.GetKey(ctx, FlagMoveState); v != nil && string(v) == "true" {
@@ -681,7 +693,121 @@ func (r *MSGraphResource) ImportState(ctx context.Context, req resource.ImportSt
 			}),
 		},
 	}
+	if strings.HasSuffix(urlValue, "/$ref") {
+		body, err := referenceBodyForID(graphBaseURL(r.client), apiVersion, id)
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid body", err.Error())
+			return
+		}
+		model.Body = body
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
+}
+
+type relationshipBodyPlanModifier struct{}
+
+func (m relationshipBodyPlanModifier) Description(ctx context.Context) string {
+	return "Treat equivalent Microsoft Graph reference bodies as unchanged."
+}
+
+func (m relationshipBodyPlanModifier) MarkdownDescription(ctx context.Context) string {
+	return "Treat equivalent Microsoft Graph reference bodies as unchanged."
+}
+
+func (m relationshipBodyPlanModifier) PlanModifyDynamic(ctx context.Context, req planmodifier.DynamicRequest, resp *planmodifier.DynamicResponse) {
+	var plan *MSGraphResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if plan == nil {
+		return
+	}
+
+	if !strings.Contains(plan.Url.ValueString(), "/$ref") {
+		return
+	}
+
+	if referenceBodiesTargetSameObject(req.PlanValue, req.StateValue) {
+		resp.PlanValue = req.StateValue
+	}
+}
+
+func graphBaseURL(client *clients.MSGraphClient) string {
+	if client != nil {
+		return client.GraphBaseUrl()
+	}
+	return "https://graph.microsoft.com"
+}
+
+func referenceBodyForID(graphBaseURL string, apiVersion string, id string) (types.Dynamic, error) {
+	body := map[string]string{
+		"@odata.id": fmt.Sprintf("%s/%s/directoryObjects/%s", strings.TrimRight(graphBaseURL, "/"), apiVersion, id),
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return types.Dynamic{}, err
+	}
+	return dynamic.FromJSONImplied(data)
+}
+
+func relationshipBodiesSemanticallyEqual(a, b types.Dynamic) bool {
+	return dynamic.SemanticallyEqual(a, b) || referenceBodiesTargetSameObject(a, b)
+}
+
+func referenceBodiesTargetSameObject(a, b types.Dynamic) bool {
+	aID, ok := referenceBodyTargetID(a)
+	if !ok {
+		return false
+	}
+	bID, ok := referenceBodyTargetID(b)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(aID, bID)
+}
+
+func referenceBodyTargetID(body types.Dynamic) (string, bool) {
+	if body.IsNull() || body.IsUnknown() {
+		return "", false
+	}
+
+	data, err := dynamic.ToJSONWithUnknownValueHandler(body, func(value attr.Value) ([]byte, error) {
+		return json.Marshal(nil)
+	})
+	if err != nil {
+		return "", false
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", false
+	}
+	if len(payload) != 1 {
+		return "", false
+	}
+
+	odataID, ok := payload["@odata.id"].(string)
+	if !ok || odataID == "" {
+		return "", false
+	}
+	return lastPathSegment(odataID)
+}
+
+func lastPathSegment(value string) (string, bool) {
+	pathValue := value
+	if parsed, err := url.Parse(value); err == nil && parsed.Path != "" {
+		pathValue = parsed.Path
+	}
+
+	pathValue = strings.TrimRight(pathValue, "/")
+	if pathValue == "" {
+		return "", false
+	}
+	if lastSlash := strings.LastIndex(pathValue, "/"); lastSlash != -1 {
+		pathValue = pathValue[lastSlash+1:]
+	}
+	return pathValue, pathValue != ""
 }
 
 func buildOutputFromBody(body interface{}, paths map[string]string) attr.Value {

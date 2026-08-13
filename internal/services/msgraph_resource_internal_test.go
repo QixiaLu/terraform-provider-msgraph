@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/microsoft/terraform-provider-msgraph/internal/dynamic"
 )
 
 func TestResolveResourceID(t *testing.T) {
@@ -126,5 +128,48 @@ func TestReconcileReferenceIdOrder(t *testing.T) {
 				t.Fatalf("expected %#v, got %#v", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestReferenceBodiesTargetSameObject(t *testing.T) {
+	userBody, err := dynamic.FromJSONImplied([]byte(`{"@odata.id":"https://graph.microsoft.com/v1.0/users/00000000-0000-0000-0000-000000000000"}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	directoryObjectBody, err := dynamic.FromJSONImplied([]byte(`{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/00000000-0000-0000-0000-000000000000"}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	otherUserBody, err := dynamic.FromJSONImplied([]byte(`{"@odata.id":"https://graph.microsoft.com/v1.0/users/11111111-1111-1111-1111-111111111111"}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	extraBody, err := dynamic.FromJSONImplied([]byte(`{"@odata.id":"https://graph.microsoft.com/v1.0/users/00000000-0000-0000-0000-000000000000","displayName":"User"}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	if !referenceBodiesTargetSameObject(userBody, directoryObjectBody) {
+		t.Fatalf("expected users and directoryObjects URLs with the same object ID to match")
+	}
+	if referenceBodiesTargetSameObject(userBody, otherUserBody) {
+		t.Fatalf("expected different object IDs not to match")
+	}
+	if referenceBodiesTargetSameObject(userBody, extraBody) {
+		t.Fatalf("expected bodies with extra properties not to match")
+	}
+}
+
+func TestReferenceBodyForID(t *testing.T) {
+	body, err := referenceBodyForID("https://graph.microsoft.com/", "v1.0", "00000000-0000-0000-0000-000000000000")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	id, ok := referenceBodyTargetID(body)
+	if !ok {
+		t.Fatalf("expected generated reference body to contain an @odata.id target")
+	}
+	if id != "00000000-0000-0000-0000-000000000000" {
+		t.Fatalf("expected generated reference body target ID to match, got %q", id)
 	}
 }
