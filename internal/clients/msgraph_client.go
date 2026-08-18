@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 )
@@ -15,11 +14,6 @@ const (
 	moduleName    = "resource"
 	moduleVersion = "v0.1.0"
 	nextLinkKey   = "@odata.nextLink"
-
-	defaultGraphHost       = "https://graph.microsoft.com"
-	defaultGraphTokenScope = defaultGraphHost + "/.default"
-
-	MicrosoftGraph cloud.ServiceName = "microsoftGraph"
 )
 
 type MSGraphClient struct {
@@ -27,31 +21,19 @@ type MSGraphClient struct {
 	pl   runtime.Pipeline
 }
 
-func NewMSGraphClient(credential azcore.TokenCredential, cloudCfg cloud.Configuration, opt *policy.ClientOptions) (*MSGraphClient, error) {
-	graphHost := defaultGraphHost
-	graphTokenScope := defaultGraphTokenScope
-
-	if graphCfg, ok := cloudCfg.Services[MicrosoftGraph]; ok {
-		if graphCfg.Endpoint != "" {
-			graphHost = graphCfg.Endpoint
-		}
-		if graphCfg.Audience != "" {
-			graphTokenScope = graphCfg.Audience + "/.default"
-		}
-	}
-
+func NewMSGraphClient(credential azcore.TokenCredential, opt *policy.ClientOptions) (*MSGraphClient, error) {
 	pl := runtime.NewPipeline(moduleName, moduleVersion, runtime.PipelineOptions{
 		AllowedHeaders:         nil,
 		AllowedQueryParameters: nil,
 		APIVersion:             runtime.APIVersionOptions{},
 		PerCall:                nil,
 		PerRetry: []policy.Policy{
-			runtime.NewBearerTokenPolicy(credential, []string{graphTokenScope}, nil),
+			runtime.NewBearerTokenPolicy(credential, []string{"https://graph.microsoft.com/.default"}, nil),
 		},
 		Tracing: runtime.TracingOptions{},
 	}, opt)
 	return &MSGraphClient{
-		host: graphHost,
+		host: "https://graph.microsoft.com",
 		pl:   pl,
 	}, nil
 }
