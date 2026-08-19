@@ -222,8 +222,12 @@ func (r *MSGraphResource) ModifyPlan(ctx context.Context, request resource.Modif
 			stateRefID = relationshipRefObjectID(state.Body)
 		}
 
+		// An unknown `body` (references a not-yet-created object) can't be proven
+		// to change the reference, so don't force replacement and cascade the
+		// computed `id`/`resource_url` to unknown; Update reconciles it later.
+		bodyUnknown := plan.Body.IsUnknown() || plan.Body.IsUnderlyingValueUnknown()
 		sameReference := planRefID != "" && strings.EqualFold(planRefID, stateRefID)
-		if !sameReference && !dynamic.SemanticallyEqual(plan.Body, state.Body) {
+		if !bodyUnknown && !sameReference && !dynamic.SemanticallyEqual(plan.Body, state.Body) {
 			response.RequiresReplace.Append(path.Root("body"))
 		}
 
@@ -323,10 +327,7 @@ func (r *MSGraphResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	// A relationship ($ref) has nothing to update: a changed reference forces a
-	// replacement in ModifyPlan, so reaching Update means only local values (such
-	// as a `body` absent from imported state) changed. Persist them without
-	// calling Graph, which does not support PATCH on a relationship URL.
+	// relationship updates are not supported
 	if strings.HasSuffix(model.Url.ValueString(), "/$ref") {
 		if model.Output.IsUnknown() {
 			model.Output = types.DynamicNull()
@@ -686,50 +687,6 @@ func (r *MSGraphResource) ImportState(ctx context.Context, req resource.ImportSt
 				"delete": types.StringType,
 			}),
 		},
-	}
-
-	// For a relationship ($ref) resource, confirm the reference actually exists
-	// and reconstruct its `body`, mirroring how azapi's ImportState issues a GET
-	// and populates `body` from the response.
-	//
-	// Microsoft Graph has no single-reference GET (only DELETE targets
-	// `.../{id}/$ref`), so existence is verified by listing the collection. The
-	// list yields clean object IDs, so the canonical `.../directoryObjects/{id}`
-	// form is rebuilt from `id` rather than parsing the returned `@odata.id`,
-	// whose `$ref` form can carry a tenant prefix and a type-cast suffix.
-	// ModifyPlan compares only the referenced object ID, so a configuration that
-	// uses an equivalent form (for example `.../users/{id}`) still plans cleanly.
-	if strings.HasSuffix(urlValue, "/$ref") {
-		if r.client == nil {
-			resp.Diagnostics.AddError("Provider not configured", "The Microsoft Graph client is not configured; cannot import a relationship resource.")
-			return
-		}
-
-		collectionUrl := baseCollectionUrl(urlValue)
-		options := clients.RequestOptions{
-			QueryParameters: clients.NewQueryParameters(nil),
-			RetryOptions:    clients.NewRetryOptions(retry.NewValueNull()),
-		}
-		referenceIds, err := r.client.ListRefIDs(ctx, collectionUrl, apiVersion, options)
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to read collection", fmt.Sprintf("listing references for %q: %s", collectionUrl, err.Error()))
-			return
-		}
-
-		if !containsRefID(referenceIds, id) {
-			resp.Diagnostics.AddError(
-				"Reference not found",
-				fmt.Sprintf("The object %q is not a member of the collection %q, so there is nothing to import.", id, collectionUrl),
-			)
-			return
-		}
-
-		payload, err := relationshipRefBody(r.client.GraphBaseUrl(), apiVersion, id)
-		if err != nil {
-			resp.Diagnostics.AddError("Invalid payload", err.Error())
-			return
-		}
-		model.Body = payload
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
