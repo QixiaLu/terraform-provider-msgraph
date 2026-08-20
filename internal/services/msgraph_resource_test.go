@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"github.com/microsoft/terraform-provider-msgraph/internal/acceptance"
 	"github.com/microsoft/terraform-provider-msgraph/internal/acceptance/check"
@@ -87,6 +88,34 @@ func TestAcc_ResourceGroupMember(t *testing.T) {
 			),
 		},
 		importStep,
+	})
+}
+
+func TestAcc_ResourceGroupMemberImport(t *testing.T) {
+	data := acceptance.BuildTestData(t, "msgraph_resource", "test")
+
+	r := MSGraphTestResource{}
+
+	data.ResourceTest(t, r, []resource.TestStep{
+		{
+			Config: r.groupMember(),
+			Check: resource.ComposeTestCheckFunc(
+				check.That(data.ResourceName).Exists(r),
+			),
+		},
+		{
+			Config:             r.groupMember(),
+			ResourceName:       data.ResourceName,
+			ImportState:        true,
+			ImportStateKind:    resource.ImportBlockWithID,
+			ImportStateIdFunc:  r.ImportIdFuncWithBetaApiVersion,
+			ExpectNonEmptyPlan: true,
+			ImportPlanChecks: resource.ImportPlanChecks{
+				PreApply: []plancheck.PlanCheck{
+					plancheck.ExpectResourceAction(data.ResourceName, plancheck.ResourceActionUpdate),
+				},
+			},
+		},
 	})
 }
 
