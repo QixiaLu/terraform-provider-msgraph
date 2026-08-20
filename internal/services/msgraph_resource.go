@@ -451,7 +451,15 @@ func (r *MSGraphResource) Read(ctx context.Context, req resource.ReadRequest, re
 		}
 
 		if v, _ := req.Private.GetKey(ctx, FlagMoveState); v != nil && string(v) == "true" {
-			payload, err := relationshipRefBody(r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), model.Id.ValueString())
+			body := map[string]string{
+				"@odata.id": fmt.Sprintf("%s/%s/directoryObjects/%s", r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), model.Id.ValueString()),
+			}
+			data, err := json.Marshal(body)
+			if err != nil {
+				resp.Diagnostics.AddError("Invalid body", err.Error())
+				return
+			}
+			payload, err := dynamic.FromJSONImplied(data)
 			if err != nil {
 				resp.Diagnostics.AddError("Invalid payload", err.Error())
 				return
@@ -690,23 +698,6 @@ func (r *MSGraphResource) ImportState(ctx context.Context, req resource.ImportSt
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, model)...)
-}
-
-// relationshipRefBody builds the canonical relationship ($ref) body for the
-// given object ID: { "@odata.id": "<graphBaseURL>/<apiVersion>/directoryObjects/<id>" }.
-// `directoryObjects` is the base type that is valid for every directory object
-// (user, group, device, service principal, ...), so it is used regardless of
-// the referenced object's concrete type. ModifyPlan compares only the trailing
-// object ID, so this canonical form still matches an equivalent configuration
-// such as ".../users/{id}".
-func relationshipRefBody(graphBaseURL, apiVersion, id string) (types.Dynamic, error) {
-	data, err := json.Marshal(map[string]string{
-		"@odata.id": fmt.Sprintf("%s/%s/directoryObjects/%s", graphBaseURL, apiVersion, id),
-	})
-	if err != nil {
-		return types.DynamicNull(), err
-	}
-	return dynamic.FromJSONImplied(data)
 }
 
 // containsRefID reports whether id is present in referenceIds, comparing
