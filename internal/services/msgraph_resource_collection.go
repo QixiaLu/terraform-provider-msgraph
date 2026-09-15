@@ -275,7 +275,7 @@ func (r *MSGraphResourceCollection) Read(ctx context.Context, req resource.ReadR
 	previous := AsListOfString(model.ReferenceIds)
 	model.ReferenceIds = ToListOfString(reconcileReferenceIdOrder(previous, referenceIds))
 	model.Output = types.DynamicValue(buildOutputFromBody(body, model.ResponseExportValues))
-	
+
 	if model.CollectionType.IsNull() {
 		model.CollectionType = types.StringValue("directoryObjects")
 	}
