@@ -99,7 +99,7 @@ func (r *MSGraphResourceCollection) Schema(ctx context.Context, req resource.Sch
 			},
 
 			"collection_type": schema.StringAttribute{
-				MarkdownDescription: "Relative Microsoft Graph path for the type of resource referenced by each value in `reference_ids`. This path is used to construct the `@odata.id` sent when adding a reference. Defaults to `directoryObjects`. Changing this value forces a new resource.",
+				MarkdownDescription: "Relative Microsoft Graph path for the type of resource referenced by each value in `reference_ids`. This path is used to construct the `@odata.id` sent when adding a reference. `directoryObjects` is used when unset. Changing this value forces a new resource.",
 				Optional:            true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
