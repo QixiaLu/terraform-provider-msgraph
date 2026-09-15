@@ -116,21 +116,20 @@ func TestAcc_ResourceCollectionImportWithApiVersion(t *testing.T) {
 	})
 }
 
-
 func TestAcc_ResourceCollectionImportWithCollectionType(t *testing.T) {
-  data := acceptance.BuildTestData(t, "msgraph_resource_collection", "test")
-  r := MSGraphTestResourceCollection{}
+	data := acceptance.BuildTestData(t, "msgraph_resource_collection", "test")
+	r := MSGraphTestResourceCollection{}
 
-  data.ResourceTest(t, r, []resource.TestStep{
-    {
-      Config: r.basicWithCollectionType(),
-      Check: resource.ComposeTestCheckFunc(
-        check.That(data.ResourceName).Exists(r),
-        resource.TestCheckResourceAttr(data.ResourceName, "reference_ids.#", "1"),
-      ),
-    },
-    data.ImportStepWithImportStateIdFunc(r.ImportIdFuncWithCollectionType),
-  })
+	data.ResourceTest(t, r, []resource.TestStep{
+		{
+			Config: r.basicWithCollectionType(),
+			Check: resource.ComposeTestCheckFunc(
+				check.That(data.ResourceName).Exists(r),
+				resource.TestCheckResourceAttr(data.ResourceName, "reference_ids.#", "1"),
+			),
+		},
+		data.ImportStepWithImportStateIdFunc(r.ImportIdFuncWithCollectionType),
+	})
 }
 
 func TestAcc_ResourceCollectionRetry(t *testing.T) {
@@ -240,8 +239,8 @@ func (r MSGraphTestResourceCollection) ImportIdFuncWithBetaApiVersion(tfState *t
 }
 
 func (r MSGraphTestResourceCollection) ImportIdFuncWithCollectionType(tfState *terraform.State) (string, error) {
-  state := tfState.RootModule().Resources["msgraph_resource_collection.test"].Primary
-  return state.Attributes["url"] + "?collection-type=identityGovernance/entitlementManagement/accessPackages", nil
+	state := tfState.RootModule().Resources["msgraph_resource_collection.test"].Primary
+	return state.Attributes["url"] + "?collection-type=identityGovernance/entitlementManagement/accessPackages", nil
 }
 
 // configuration helpers
@@ -361,7 +360,7 @@ resource "msgraph_resource_collection" "test" {
 }
 
 func (r MSGraphTestResourceCollection) basicWithCollectionType() string {
-  return `
+	return `
 resource "msgraph_resource" "catalog" {
   url         = "identityGovernance/entitlementManagement/catalogs"
   api_version = "v1.0"
