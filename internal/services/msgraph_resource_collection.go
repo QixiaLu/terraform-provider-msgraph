@@ -99,8 +99,10 @@ func (r *MSGraphResourceCollection) Schema(ctx context.Context, req resource.Sch
 			},
 
 			"collection_type": schema.StringAttribute{
-				MarkdownDescription: "Relative Microsoft Graph path for the type of resource referenced by each value in `reference_ids`. This path is used to construct the `@odata.id` sent when adding a reference. `directoryObjects` is used when unset. Changing this value forces a new resource.",
+				MarkdownDescription: "Relative Microsoft Graph path for the type of resource referenced by each value in `reference_ids`. This path is used to construct the `@odata.id` sent when adding a reference. Defaults to `directoryObjects`. Changing this value forces a new resource.",
 				Optional:            true,
+				Computed:            true,
+				Default:             stringdefault.StaticString("directoryObjects"),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -273,6 +275,11 @@ func (r *MSGraphResourceCollection) Read(ctx context.Context, req resource.ReadR
 	previous := AsListOfString(model.ReferenceIds)
 	model.ReferenceIds = ToListOfString(reconcileReferenceIdOrder(previous, referenceIds))
 	model.Output = types.DynamicValue(buildOutputFromBody(body, model.ResponseExportValues))
+	
+	if model.CollectionType.IsNull() {
+		model.CollectionType = types.StringValue("directoryObjects")
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &model)...)
 }
 
@@ -325,13 +332,9 @@ func (r *MSGraphResourceCollection) syncCollection(ctx context.Context, model *M
 
 func (r *MSGraphResourceCollection) applyCollection(ctx context.Context, model *MSGraphResourceCollectionModel, toRemove []string, toAdd []string) error {
 	errs := make([]error, 0)
-	collectionType := "directoryObjects"
-	if !model.CollectionType.IsNull() {
-		collectionType = model.CollectionType.ValueString()
-	}
 	for _, item := range toAdd {
 		body := map[string]string{}
-		body["@odata.id"] = fmt.Sprintf("%s/%s/%s/%s", r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), collectionType, item)
+		body["@odata.id"] = fmt.Sprintf("%s/%s/%s/%s", r.client.GraphBaseUrl(), model.ApiVersion.ValueString(), model.CollectionType.ValueString(), item)
 		_, _, err := r.client.Create(ctx, "", model.Url.ValueString(), model.ApiVersion.ValueString(), body, clients.RequestOptions{RetryOptions: clients.NewRetryOptions(model.Retry)})
 		if err != nil {
 			errs = append(errs, err)
@@ -425,9 +428,9 @@ func (r *MSGraphResourceCollection) ImportState(ctx context.Context, req resourc
 		apiVersion = parsedUrl.Query().Get("api-version")
 	}
 
-	collectionType := types.StringNull()
-	if v := parsedUrl.Query().Get("collection-type"); v != "" {
-		collectionType = types.StringValue(v)
+	collectionType := "directoryObjects"
+	if parsedUrl.Query().Get("collection-type") != "" {
+		collectionType = parsedUrl.Query().Get("collection-type")
 	}
 
 	model := &MSGraphResourceCollectionModel{
@@ -435,7 +438,7 @@ func (r *MSGraphResourceCollection) ImportState(ctx context.Context, req resourc
 		Url:                 types.StringValue(urlValue),
 		ApiVersion:          types.StringValue(apiVersion),
 		ReferenceIds:        types.ListNull(types.StringType),
-		CollectionType:      collectionType,
+		CollectionType:      types.StringValue(collectionType),
 		SkipDestroy:         types.BoolValue(false),
 		ReadQueryParameters: types.MapNull(types.ListType{ElemType: types.StringType}),
 		Retry:               retry.NewValueNull(),
