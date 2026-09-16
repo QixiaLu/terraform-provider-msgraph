@@ -92,7 +92,7 @@ func (r *MSGraphResourceCollection) Schema(ctx context.Context, req resource.Sch
 			},
 
 			"reference_ids": schema.ListAttribute{
-				MarkdownDescription: "List of object IDs that MUST exist in this `$ref` collection. Missing IDs are added; extra remote items are removed. Order is ignored. Each value should be the GUID (or string identifier) of an existing object of the type given by `collection_type`.",
+				MarkdownDescription: "List of object IDs that MUST exist in this `$ref` collection. Missing IDs are added; extra remote items are removed. Order is ignored. Each value should be the GUID (or string identifier) of an existing object whose type set by `collection_type`.",
 				ElementType:         types.StringType,
 				Optional:            true,
 				PlanModifiers:       []planmodifier.List{myplanmodifier.OrderInsensitiveStringList()},
