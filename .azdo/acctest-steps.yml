@@ -21,11 +21,13 @@ steps:
       echo "Overriding terraform CLI for acctest to workaround the error: 'cannot run Terraform provider tests: failed to find or install Terraform CLI from [0xc000130100 0xc000154000]: unable to verify checksums signature: openpgp: key expired'"
       echo "##vso[task.setvariable variable=TF_ACC_TERRAFORM_PATH]${terraform_path}"
     displayName: "Configure Terraform CLI for acctest"
+    workingDirectory: $(Build.SourcesDirectory)
 
   - bash: |
       #!/usr/bin/env bash
       make tools
     displayName: "Install Dependencies"
+    workingDirectory: $(Build.SourcesDirectory)
     env:
       ob_restore_phase: true
 
@@ -33,6 +35,7 @@ steps:
       #!/usr/bin/env bash
       make depscheck
     displayName: "Verify Vendor Dependencies"
+    workingDirectory: $(Build.SourcesDirectory)
     env:
       ob_restore_phase: true
 
@@ -40,16 +43,19 @@ steps:
       #!/usr/bin/env bash
       make fmtcheck
     displayName: "Run Format Check"
+    workingDirectory: $(Build.SourcesDirectory)
 
   - bash: |
       #!/usr/bin/env bash
       make lint
     displayName: "Run Lint Check"
+    workingDirectory: $(Build.SourcesDirectory)
 
   - bash: |
       #!/usr/bin/env bash
       make testacc
     displayName: "Run All Tests"
+    workingDirectory: $(Build.SourcesDirectory)
     env:
       ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
       ARM_CLIENT_ID: $(ARM_CLIENT_ID)
