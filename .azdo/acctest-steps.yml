@@ -2,7 +2,7 @@ steps:
   - task: GoTool@0
     displayName: "Install correct version of Go"
     inputs:
-      version: '1.26.5'
+      version: '1.24.11'
       GOPATH: "$(Pipeline.Workspace)/gopath"
       GOBIN: "$(GOPATH)/bin"
     env:
