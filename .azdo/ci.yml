@@ -10,9 +10,11 @@ stages:
 
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
+          sourceDirectory: $(Pipeline.Workspace)/s/terraform-provider-msgraph
 
         steps:
           - checkout: self
+            path: s/terraform-provider-msgraph
             persistCredentials: false
 
           - bash: mkdir -p "$(ob_outputDirectory)"
@@ -24,27 +26,6 @@ stages:
               version: '1.24.11'
               GOPATH: "$(Pipeline.Workspace)/gopath"
               GOBIN: "$(GOPATH)/bin"
-            env:
-              ob_restore_phase: true
-
-          - bash: |
-              #!/usr/bin/env bash
-              set -euo pipefail
-              go version
-              go env GOPROXY GOPRIVATE GONOPROXY
-              proxy="$(go env GOPROXY)"
-              if [[ -z "$proxy" || "$proxy" == *","* || "$proxy" == *"|"* || ! "$proxy" =~ ^https?://[^/]+ ]]; then
-                printf 'Expected a single Go proxy endpoint without fallback.\n' >&2
-                exit 1
-              fi
-              # Use a fresh cache so -x shows actual requests to the configured proxy.
-              module_cache="$(mktemp -d)"
-              trap 'chmod -R u+w "$module_cache"; rm -rf "$module_cache"' EXIT
-              export GOMODCACHE="$module_cache"
-              go mod download -x all
-              go mod verify
-            displayName: "Verify Go module proxy and downloads"
-            workingDirectory: $(Build.SourcesDirectory)
             env:
               ob_restore_phase: true
 
@@ -61,13 +42,13 @@ stages:
               echo "Overriding terraform CLI for acctest to workaround the error: 'cannot run Terraform provider tests: failed to find or install Terraform CLI from [0xc000130100 0xc000154000]: unable to verify checksums signature: openpgp: key expired'"
               echo "##vso[task.setvariable variable=TF_ACC_TERRAFORM_PATH]${terraform_path}"
             displayName: "Configure Terraform CLI for acctest"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
 
           - bash: |
               #!/usr/bin/env bash
               make tools
             displayName: "Install Dependencies"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
             env:
               ob_restore_phase: true
 
@@ -75,7 +56,7 @@ stages:
               #!/usr/bin/env bash
               make depscheck
             displayName: "Verify Vendor Dependencies"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
             env:
               ob_restore_phase: true
 
@@ -95,7 +76,7 @@ stages:
               fi
               make fmtcheck
             displayName: "Run Format Check"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
             env:
               EXPECTED_SOURCE_VERSION: $(Build.SourceVersion)
               REPOSITORY_LOCAL_PATH: $(Build.Repository.LocalPath)
@@ -104,13 +85,13 @@ stages:
               #!/usr/bin/env bash
               make lint
             displayName: "Run Lint Check"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
 
           - bash: |
               #!/usr/bin/env bash
               make testacc
             displayName: "Run All Tests"
-            workingDirectory: $(Build.SourcesDirectory)
+            workingDirectory: $(sourceDirectory)
             env:
               ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
               ARM_CLIENT_ID: $(ARM_CLIENT_ID)
