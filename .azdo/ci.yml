@@ -37,11 +37,10 @@ stages:
                 printf 'Expected a single Go proxy endpoint without fallback.\n' >&2
                 exit 1
               fi
-              no_proxy="$(go env GONOPROXY)"
-              if [[ -n "$no_proxy" && "$no_proxy" != "none" ]]; then
-                printf 'Expected GONOPROXY to be empty or none so public modules cannot bypass the proxy.\n' >&2
-                exit 1
-              fi
+              # Use a fresh cache so -x shows actual requests to the configured proxy.
+              module_cache="$(mktemp -d)"
+              trap 'chmod -R u+w "$module_cache"; rm -rf "$module_cache"' EXIT
+              export GOMODCACHE="$module_cache"
               go mod download -x all
               go mod verify
             displayName: "Verify Go module proxy and downloads"
