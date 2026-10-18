@@ -10,11 +10,10 @@ stages:
 
         variables:
           ob_outputDirectory: $(Build.SourcesDirectory)/out
-          sourceDirectory: $(Pipeline.Workspace)/s/terraform-provider-msgraph
+          buildSourceDirectory: $(Build.SourcesDirectory)/terraform-provider-msgraph
 
         steps:
           - checkout: self
-            path: s/terraform-provider-msgraph
             persistCredentials: false
 
           - bash: mkdir -p "$(ob_outputDirectory)"
@@ -42,13 +41,13 @@ stages:
               echo "Overriding terraform CLI for acctest to workaround the error: 'cannot run Terraform provider tests: failed to find or install Terraform CLI from [0xc000130100 0xc000154000]: unable to verify checksums signature: openpgp: key expired'"
               echo "##vso[task.setvariable variable=TF_ACC_TERRAFORM_PATH]${terraform_path}"
             displayName: "Configure Terraform CLI for acctest"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(buildSourceDirectory)
 
           - bash: |
               #!/usr/bin/env bash
               make tools
             displayName: "Install Dependencies"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(Build.SourcesDirectory)
             env:
               ob_restore_phase: true
 
@@ -56,7 +55,7 @@ stages:
               #!/usr/bin/env bash
               make depscheck
             displayName: "Verify Vendor Dependencies"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(Build.SourcesDirectory)
             env:
               ob_restore_phase: true
 
@@ -76,7 +75,7 @@ stages:
               fi
               make fmtcheck
             displayName: "Run Format Check"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(buildSourceDirectory)
             env:
               EXPECTED_SOURCE_VERSION: $(Build.SourceVersion)
               REPOSITORY_LOCAL_PATH: $(Build.Repository.LocalPath)
@@ -85,13 +84,13 @@ stages:
               #!/usr/bin/env bash
               make lint
             displayName: "Run Lint Check"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(buildSourceDirectory)
 
           - bash: |
               #!/usr/bin/env bash
               make testacc
             displayName: "Run All Tests"
-            workingDirectory: $(sourceDirectory)
+            workingDirectory: $(buildSourceDirectory)
             env:
               ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
               ARM_CLIENT_ID: $(ARM_CLIENT_ID)
