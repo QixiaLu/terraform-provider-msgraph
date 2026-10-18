@@ -61,24 +61,9 @@ stages:
 
           - bash: |
               #!/usr/bin/env bash
-              set -euo pipefail
-              if [[ ! -f GNUmakefile ]]; then
-                printf 'GNUmakefile is missing from the build container source directory: %s\n' "$PWD" >&2
-                printf 'Expected source revision: %s\n' "$EXPECTED_SOURCE_VERSION" >&2
-                printf 'Source directory contents:\n' >&2
-                ls -la >&2
-                printf 'Repository-local directory: %s\n' "$REPOSITORY_LOCAL_PATH" >&2
-                if [[ -d "$REPOSITORY_LOCAL_PATH" && "$REPOSITORY_LOCAL_PATH" != "$PWD" ]]; then
-                  ls -la "$REPOSITORY_LOCAL_PATH" >&2
-                fi
-                exit 1
-              fi
               make fmtcheck
             displayName: "Run Format Check"
             workingDirectory: $(buildSourceDirectory)
-            env:
-              EXPECTED_SOURCE_VERSION: $(Build.SourceVersion)
-              REPOSITORY_LOCAL_PATH: $(Build.Repository.LocalPath)
 
           - bash: |
               #!/usr/bin/env bash
