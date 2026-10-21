@@ -152,14 +152,15 @@ func NewRetryOptions(rtry retry.Value) *policy.RetryOptions {
 				}
 			}
 
-			// Get the error message to check against regex patterns,
-			// If use the err.Error() string first, else get the response error from the HTTP response.
+			// Only construct response errors for actual HTTP errors, not successful responses or redirects.
 			var errorMsg string
 			if err != nil {
 				errorMsg = err.Error()
-			} else {
+			} else if resp.StatusCode >= http.StatusBadRequest {
 				responseErr := runtime.NewResponseError(resp)
-				errorMsg = responseErr.Error()
+				if responseErr != nil {
+					errorMsg = responseErr.Error()
+				}
 			}
 			// Check if the error message matches any of the retryable error regexps
 			if errorMsg == "" {
