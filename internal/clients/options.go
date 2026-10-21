@@ -158,9 +158,7 @@ func NewRetryOptions(rtry retry.Value) *policy.RetryOptions {
 				errorMsg = err.Error()
 			} else if resp.StatusCode >= http.StatusBadRequest {
 				responseErr := runtime.NewResponseError(resp)
-				if responseErr != nil {
-					errorMsg = responseErr.Error()
-				}
+				errorMsg = responseErr.Error()
 			}
 			// Check if the error message matches any of the retryable error regexps
 			if errorMsg == "" {
