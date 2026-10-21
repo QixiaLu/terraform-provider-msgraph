@@ -18,8 +18,8 @@ const (
 )
 
 type liveTrafficLogPolicy struct {
-	notAllowedHeaders map[string]bool
-	logRequestResponseBody  bool
+	notAllowedHeaders      map[string]bool
+	logRequestResponseBody bool
 }
 
 type traffic struct {
