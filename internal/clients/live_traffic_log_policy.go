@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	redactedValue       = "REDACTED"
-	logSensitiveDataEnv = "MSGRAPH_LOG_REQUEST_RESPONSE_BODY"
+	redactedValue             = "REDACTED"
+	logRequestResponseBodyEnv = "MSGRAPH_LOG_REQUEST_RESPONSE_BODY"
 )
 
 type liveTrafficLogPolicy struct {
 	notAllowedHeaders map[string]bool
-	logSensitiveData  bool
+	logRequestResponseBody  bool
 }
 
 type traffic struct {
@@ -42,7 +42,7 @@ type liveResponse struct {
 
 func NewLiveTrafficLogPolicy() policy.Policy {
 	return &liveTrafficLogPolicy{
-		logSensitiveData: os.Getenv(logSensitiveDataEnv) == "true",
+		logRequestResponseBody: os.Getenv(logRequestResponseBodyEnv) == "true",
 		notAllowedHeaders: map[string]bool{
 			"authorization":                true,
 			"x-ms-authorization-auxiliary": true,
@@ -89,7 +89,7 @@ func (p *liveTrafficLogPolicy) requestBodyString(req *policy.Request) string {
 	if req.Raw().Body == nil {
 		return ""
 	}
-	if !p.logSensitiveData {
+	if !p.logRequestResponseBody {
 		return redactedValue
 	}
 	body, err := io.ReadAll(req.Raw().Body)
@@ -104,7 +104,7 @@ func (p *liveTrafficLogPolicy) responseBodyString(resp *http.Response) string {
 	if resp.Body == nil {
 		return ""
 	}
-	if !p.logSensitiveData {
+	if !p.logRequestResponseBody {
 		return redactedValue
 	}
 	body, err := runtime.Payload(resp)
