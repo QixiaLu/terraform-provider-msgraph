@@ -14,7 +14,7 @@ import (
 
 const (
 	redactedValue       = "REDACTED"
-	logSensitiveDataEnv = "MSGRAPH_LOG_SENSITIVE_DATA"
+	logSensitiveDataEnv = "MSGRAPH_LOG_REQUEST_RESPONSE_BODY"
 )
 
 type liveTrafficLogPolicy struct {
